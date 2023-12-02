@@ -1,0 +1,15 @@
+[package]
+name = "aoc"
+version = "0.1.0"
+description = "command line tool to run advent of code puzzles and display output and timings"
+authors = [ "Jan-Pieter Cornet <jp+aoc2021 -at- cornet.org>" ]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+exrunner = { path = "../exrunner" }
+clap = { version = "4.4.10", features = ["derive"] }
+reqwest = { version = "0.11.22", features = ["blocking"] }
+comfy-table = "7.1.0"
+day1_trebuchet = { path = "../day1_trebuchet" }
