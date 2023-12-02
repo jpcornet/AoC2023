@@ -1,20 +1,19 @@
 use exrunner::ExRunner;
 use std::io::BufRead;
-use std::collections::HashMap;
+
+const NUMBERS: [(&str, i32); 9] = [
+    ("one", 1),
+    ("two", 2),
+    ("six", 6),
+    ("four", 4),
+    ("five", 5),
+    ("nine", 9),
+    ("three", 3),
+    ("seven", 7),
+    ("eight", 8),
+];
 
 pub fn solve(input: impl BufRead, er: &mut ExRunner) {
-    let numbers = HashMap::from([
-        ("one", 1),
-        ("two", 2),
-        ("three", 3),
-        ("four", 4),
-        ("five", 5),
-        ("six", 6),
-        ("seven", 7),
-        ("eight", 8),
-        ("nine", 9),
-    ]);
-
     let in_vec: Vec<String> = input.lines()
                     .map(|x| x.unwrap()).collect();
     er.parse_done();
@@ -36,11 +35,14 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
                 let bval = (l.as_bytes())[pos] - b'0';
                 lval = Some(bval.into());
             }
-            for (name, val) in &numbers {
-                if let Some(pos) = l.find(*name) {
+            for (name, val) in NUMBERS {
+                if lpos.is_some() && lpos.unwrap() <= 2 {
+                    break;
+                }
+                if let Some(pos) = l.find(name) {
                     if lpos.is_none() || pos < lpos.unwrap() {
                         lpos = Some(pos);
-                        lval = Some(*val);
+                        lval = Some(val);
                     }
                 }
             }
@@ -50,11 +52,14 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
                 let bval = (l.as_bytes())[pos] - b'0';
                 rval = Some(bval.into());
             }
-            for (name, val) in &numbers {
-                if let Some(pos) = l.rfind(*name) {
+            for (name, val) in NUMBERS {
+                if rpos.is_some() && rpos.unwrap() >= l.len() - name.len() {
+                    break;
+                }
+                if let Some(pos) = l.rfind(name) {
                     if rpos.is_none() || pos > rpos.unwrap() {
                         rpos = Some(pos);
-                        rval = Some(*val);
+                        rval = Some(val);
                     }
                 }
             }
