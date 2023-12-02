@@ -19,7 +19,7 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
             .parse().expect("number should be numeric");
         let subgames = gameplay.split(';');
         let mut is_possible = true;
-        let mut min_cubes: HashMap<&str, i32> = HashMap::new();
+        let mut min_cubes = HashMap::new();
         for sg in subgames {
             for cubes in sg.split(',') {
                 let numcolour = cubes.trim_start().split_once(|c: char| c.is_whitespace())
