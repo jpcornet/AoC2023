@@ -9,6 +9,7 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
         ("blue", 14),
     ]);
     let mut possible = 0;
+    let mut totpower = 0;
     for l in input.lines() {
         let line = l.unwrap();
         let (gamenrstr, gameplay) = line.split_once(':').expect("Input line contains no colon");
@@ -18,6 +19,7 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
             .parse().expect("number should be numeric");
         let subgames = gameplay.split(';');
         let mut is_possible = true;
+        let mut min_cubes: HashMap<&str, i32> = HashMap::new();
         for sg in subgames {
             for cubes in sg.split(',') {
                 let numcolour = cubes.trim_start().split_once(|c: char| c.is_whitespace())
@@ -27,13 +29,22 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
                 if num > *max_of {
                     is_possible = false;
                 }
+                min_cubes.entry(numcolour.1)
+                    .and_modify(|e| if *e < num { *e = num })
+                    .or_insert(num);
             }
         }
         if is_possible {
             possible += gamenr;
         }
+        let power = *min_cubes.get("red").unwrap_or(&0)
+            * *min_cubes.get("green").unwrap_or(&0)
+            * *min_cubes.get("blue").unwrap_or(&0);
+        // er.debugln(&format!("Power for game {} is {}", gamenr, power));
+        totpower += power;
     }
     er.part1(possible, None);
+    er.part2(totpower, None);
 }
 
 #[cfg(test)]
@@ -57,5 +68,6 @@ Game 5: 6 red, 1 blue, 3 green; 2 blue, 1 red, 2 green
         let er = ExRunner::run("day 2 - cube conundrum".to_string(), solve, test_input());
         er.print_raw();
         assert_eq!(er.answ()[0], Some("8".to_string()));
+        assert_eq!(er.answ()[1], Some("2286".to_string()));
     }
 }
