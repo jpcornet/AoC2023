@@ -48,18 +48,21 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
             }
             let mut rpos = l.rfind(|c: char| c.is_ascii_digit());
             let mut rval = None;
+            let mut mlen = 0;
             if let Some(pos) = rpos {
                 let bval = (l.as_bytes())[pos] - b'0';
                 rval = Some(bval.into());
+                mlen = 1;
             }
             for (name, val) in NUMBERS {
-                if rpos.is_some() && rpos.unwrap() >= l.len() - name.len() {
+                if rpos.is_some() && rpos.unwrap() + mlen + name.len() > l.len() {
                     break;
                 }
                 if let Some(pos) = l.rfind(name) {
                     if rpos.is_none() || pos > rpos.unwrap() {
                         rpos = Some(pos);
                         rval = Some(val);
+                        mlen = name.len();
                     }
                 }
             }
