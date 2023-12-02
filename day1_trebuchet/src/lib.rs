@@ -33,7 +33,7 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
             let mut lpos = l.find(|c: char| c.is_ascii_digit());
             let mut lval = None;
             if let Some(pos) = lpos {
-                let bval = (l[pos..pos+1].as_bytes())[0] - b'0';
+                let bval = (l.as_bytes())[pos] - b'0';
                 lval = Some(bval.into());
             }
             for (name, val) in &numbers {
@@ -47,7 +47,7 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
             let mut rpos = l.rfind(|c: char| c.is_ascii_digit());
             let mut rval = None;
             if let Some(pos) = rpos {
-                let bval = (l[pos..pos+1].as_bytes())[0] - b'0';
+                let bval = (l.as_bytes())[pos] - b'0';
                 rval = Some(bval.into());
             }
             for (name, val) in &numbers {

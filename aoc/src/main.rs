@@ -8,6 +8,7 @@ const YEAR: u16 = 2023;
 // all puzzle days. Note that the puzzle number should be the first number in the directory name.
 const DAYS: &'static [Day] = &[
     Day{ dir: "day1_trebuchet", solve: day1_trebuchet::solve },
+    Day{ dir: "day2_cube_conundrum", solve: day2_cube_conundrum::solve },
 ];
 
 fn main() {
