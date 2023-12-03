@@ -9,6 +9,7 @@ const YEAR: u16 = 2023;
 const DAYS: &'static [Day] = &[
     Day{ dir: "day1_trebuchet", solve: day1_trebuchet::solve },
     Day{ dir: "day2_cube_conundrum", solve: day2_cube_conundrum::solve },
+    Day{ dir: "day3_gear_ratios", solve: day3_gear_ratios::solve },
 ];
 
 fn main() {
