@@ -1,24 +1,40 @@
 use exrunner::ExRunner;
 use std::io::BufRead;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 
 pub fn solve(input: impl BufRead, er: &mut ExRunner) {
-    let sum: i32 = input.lines().map(|l| {
+    let wins: Vec<_> = input.lines().map(|l| {
         let line = l.unwrap();
         let (win, have) = line.split_once(':').expect("Line needs Card #:")
             .1.split_once('|').expect("Line needs numbers | numbers");
-        let mut wins = HashMap::new();
+        let mut winnums = HashMap::new();
         for w in win.trim().split_whitespace() {
-            wins.insert(w, ());
+            winnums.insert(w, ());
         }
-        let scored: Vec<_> = have.trim().split_whitespace().filter(|h| wins.contains_key(*h)).collect();
-        if scored.len() > 0 {
-            1 << (scored.len() - 1)
-        } else {
-            0
+        have.trim().split_whitespace().filter(|h| winnums.contains_key(*h)).collect::<Vec<_>>().len()
+    }).collect();
+    let part1: i32 = wins.iter().filter_map(|w| if *w > 0 { Some(1 << (*w-1)) } else { None }).sum();
+    er.part1(part1, None);
+    let mut copies_won: VecDeque<usize> = VecDeque::new();
+    let part2: usize = wins.iter().map(|w| {
+        let copies = copies_won.pop_front().unwrap_or(0) + 1;
+        // er.debugln(&format!("Next card has {} copies", copies));
+        // we win copies of each of the next w cards
+        for i in 0..*w {
+            if let Some(c) = copies_won.get_mut(i) {
+                *c += copies;
+            } else {
+                // no copies for this card yet, so we just win number of copies
+                copies_won.push_back(copies);
+            }
         }
+        copies
     }).sum();
-    er.part1(sum, None);
+    if !copies_won.is_empty() {
+        er.debugln(&format!("Warning, copies_won is not empty, contains: {:?}", copies_won));
+    }
+    er.part2(part2, None);
 }
 
 #[cfg(test)]
@@ -43,5 +59,6 @@ Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11
         let er = ExRunner::run("day 3".to_string(), solve, test_input());
         er.print_raw();
         assert_eq!(er.answ()[0], Some("13".to_string()));
+        assert_eq!(er.answ()[1], Some("30".to_string()));
     }
 }
