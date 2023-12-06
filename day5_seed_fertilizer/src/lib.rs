@@ -1,7 +1,7 @@
 use exrunner::ExRunner;
 use std::{io::{BufRead, Lines}, cmp::Ordering, collections::HashMap};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ProcItem {
     what: String,
     num: i64
@@ -26,7 +26,7 @@ impl ConvMap {
         let (fromname, toname) = name.split_once("-to-").expect("Map name must contain -to-");
         let mut items: Vec<_> = lines.take_while(|l| l.is_ok() && l.as_ref().unwrap() != "").map(|l| {
             let nums: Vec<_> = l.expect("Error reading input").split_whitespace()
-                .map(|n| n.parse::<i64>().expect("maps should be numeric"))
+                .map(|n| n.parse().expect("maps should be numeric"))
                 .collect();
             assert_eq!(nums.len(), 3, "Maps should contain 3 numbers per line");
             ConvMapItem{ dest_start: nums[0], src_start: nums[1], len: nums[2]}
@@ -43,7 +43,7 @@ impl ConvMap {
         ConvMap{ fromwhat: fromname.to_string(), towhat: toname.to_string(), convmaps: items }
     }
 
-    fn map(&self, inelem: &ProcItem) -> ProcItem {
+    fn map(&self, inelem: &ProcItem) -> (ProcItem, Option<i64>) {
         if inelem.what != self.fromwhat {
             panic!("Cannot index map {}-to-{} with a {}", self.fromwhat, self.towhat, inelem.what);
         }
@@ -57,9 +57,16 @@ impl ConvMap {
             }
         });
         if let Ok(i) = index {
-            ProcItem{ what: self.towhat.to_string(), num: inelem.num - self.convmaps[i].src_start + self.convmaps[i].dest_start }
+            (ProcItem{ what: self.towhat.to_string(), num: inelem.num - self.convmaps[i].src_start + self.convmaps[i].dest_start },
+                Some(self.convmaps[i].src_start + self.convmaps[i].len - inelem.num) )
         } else {
-            ProcItem{ what: self.towhat.to_string(), num: inelem.num }
+            let pi = ProcItem{ what: self.towhat.to_string(), num: inelem.num };
+            let nxtpos = index.err().unwrap_or(self.convmaps.len());
+            if nxtpos < self.convmaps.len() {
+                (pi, Some(self.convmaps[nxtpos].src_start - inelem.num))
+            } else {
+                (pi, None)
+            }
         }
     }
 }
@@ -84,19 +91,50 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
     er.parse_done();
 
     let mut min_loc = None;
-    for s in seeds {
-        let mut pi = s;
+    for s in &seeds {
+        let mut pi = s.clone();
         while pi.what != "location" {
             // er.debugln(&format!("Have a {:?}", pi));
             let cmap = maps.get(&pi.what).expect(&format!("No map available for {}", pi.what));
-            pi = cmap.map(&pi);
+            (pi, _) = cmap.map(&pi);
         }
         // er.debugln(&format!("Got a location: {:?}", pi));
         if min_loc.is_none() || min_loc.unwrap() > pi.num {
             min_loc = Some(pi.num);
         }
     }
-    er.part1(min_loc.unwrap_or(0), None);
+    er.part1(min_loc.unwrap_or(0), Some("Minimum location based on individual seeds"));
+
+    // part 2, treat the seeds as a (start, len) pair
+    min_loc = None;
+    let mut si = seeds.iter();
+    while let Some(s) = si.next() {
+        let lasts = s.num + si.next().expect("Expect even amount of numbers on seed line").num;
+        er.debugln(&format!("Starting with seed {:?}, upto = {}", s, lasts));
+        let mut stseed = s.clone();
+        let mut minrange = None;
+        while stseed.num < lasts {
+            let mut pi = stseed.clone();
+            // er.debugln(&format!("  trying seed {:?}", stseed));
+            while pi.what != "location" {
+                let cmap = maps.get(&pi.what).expect("map error");
+                let rsize;
+                (pi, rsize) = cmap.map(&pi);
+                if minrange.is_none() {
+                    minrange = rsize;
+                } else if rsize.is_some() && minrange.unwrap() > rsize.unwrap() {
+                    minrange = rsize;
+                }
+            }
+            if min_loc.is_none() || min_loc.unwrap() > pi.num {
+                min_loc = Some(pi.num);
+                er.debugln(&format!("Minimum location so far: {}", pi.num));
+            }
+            assert!(minrange.unwrap_or(0) > 0, "minrange cannot be zero");
+            stseed.num += minrange.unwrap();
+        }
+    }
+    er.part2(min_loc.unwrap_or(0), Some("Minimum location based on seed ranges"));
 }
 
 #[cfg(test)]
@@ -147,5 +185,6 @@ humidity-to-location map:
         let er = ExRunner::run("day 5".to_string(), solve, test_input());
         er.print_raw();
         assert_eq!(er.answ()[0], Some("35".to_string()));
+        assert_eq!(er.answ()[1], Some("46".to_string()));
     }
 }
