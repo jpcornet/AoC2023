@@ -192,7 +192,7 @@ fn download_input(rootdir: &PathBuf, dirname: &str, target: &PathBuf, year: u16)
         Ok(resp) => resp,
     };
     // make sure output directory exists. Create it if not
-    let targetdir = target.parent().unwrap().clone();
+    let targetdir = target.parent().unwrap();
     let meta = fs::metadata(targetdir);
     if meta.is_err() && meta.err().unwrap().kind() == ErrorKind::NotFound {
         println!("Creating input directory {}", targetdir.to_string_lossy());
