@@ -16,15 +16,15 @@ struct ConvMap {
     towhat: String,
     convmaps: Vec<ConvMapItem>,
     revmaps: Vec<ConvMapItem>,
-    destend: Vec<(PItem, usize)>,
+    destend: Vec<(PItem, usize, Option<PItem>)>, // tuple contains: end+1 of range, index of range, minimum of start of all ranges after this one
 }
 
-// struct ProcItemIter<'a> {
-//     num: PItem,
-//     direct: Option<Option<i64>>,
-//     index: usize,
-//     cmap: &'a ConvMap,
-// }
+struct ProcItemIter<'a> {
+    num: PItem,
+    direct: Option<Option<PItem>>,
+    index: usize,
+    cmap: &'a ConvMap,
+}
 
 impl ConvMap {
     fn new(name: &str, lines: &mut Lines<impl BufRead>) -> ConvMap {
@@ -45,12 +45,26 @@ impl ConvMap {
                 last = i.src_start + i.len;
             }
         }
-        // now build the reverse maps
+        // now build the reverse maps, by calculating "revmap" and "destend"
+        // revmap is the same ranges as convmaps, now sorted on start of target range.
+        // destend contains the end of all ranges, sorted. Plus an index into the revmap for that range,
+        // and the minimum of all revmaps that come after this range in the destend array, if any.
+        // when doing a reverse map, we first find the range that ends just before the target, then
+        // iterate in the "destend" map, until we hit a range where the minimum of all ranges is after our target.
+        // range length is determined either until the end of our current range, or until the start of the next range,
+        // which ever comes sooner.
         let mut revmaps = convmaps.clone();
         revmaps.sort_by_key(|ci| ci.dest_start);
-        // now fill "destend"
-        let mut destend: Vec<_> = revmaps.iter().enumerate().map(|(index, ci)| (ci.dest_start + ci.len, index)).collect();
-        destend.sort_by_key(|&(end, _)| end);
+        let mut destend: Vec<_> = revmaps.iter().enumerate().map(|(index, ci)| (ci.dest_start + ci.len, index, None)).collect();
+        destend.sort_by_key(|&(end, _, _)| end);
+        // fill the minimum of ranges after target in destend, by iterating from the end
+        let mut minstart = None;
+        for de in destend.iter_mut().rev() {
+            de.2 = minstart;
+            if minstart.is_none() || minstart.unwrap() > revmaps[de.1].dest_start {
+                minstart = Some(revmaps[de.1].dest_start);
+            }
+        }
 
         ConvMap{ fromwhat: fromname.to_string(), towhat: toname.to_string(), convmaps, revmaps, destend }
     }
@@ -69,13 +83,79 @@ impl ConvMap {
             (inelem - self.convmaps[i].src_start + self.convmaps[i].dest_start,
                 Some(self.convmaps[i].src_start + self.convmaps[i].len - inelem) )
         } else {
-            let nxtpos = index.err().unwrap_or(self.convmaps.len());
+            let nxtpos = index.unwrap_err();
             if nxtpos < self.convmaps.len() {
                 (inelem, Some(self.convmaps[nxtpos].src_start - inelem))
             } else {
                 (inelem, None)
             }
         }
+    }
+
+    fn revmap(&self, inelem: PItem) -> ProcItemIter {
+        // try a straigt conversion. Only if the given number does not fall in any map.
+        let index = self.convmaps.binary_search_by(|ci| {
+            if ci.src_start > inelem {
+                Ordering::Greater
+            } else if ci.src_start + ci.len <= inelem {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        });
+        let direct;
+        if let Err(dirnext) = index {
+            if dirnext >= self.convmaps.len() {
+                // direct is possible, but there is no known range length
+                direct = Some(None);
+            } else {
+                // direct is possible, dirnext contains the next range, so range length is known
+                direct = Some(Some(self.convmaps[dirnext].src_start - inelem));
+            }
+        } else {
+            direct = None;
+        }
+
+        let stindex = self.destend.binary_search_by_key(&inelem, |&(end, _, _)| end);
+        // we matched one after the end of the range, so we can start right where we matched.
+        let de_ind = stindex.unwrap_or_else(|e| e);
+        ProcItemIter{ num: inelem, direct, index: de_ind, cmap: self }
+    }
+}
+
+impl<'a> Iterator for ProcItemIter<'a> {
+    type Item = (PItem, Option<PItem>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(dirsize) = self.direct.take() {
+            return Some((self.num, dirsize));
+        }
+        // search ranges until we run out of possible ones: either end of ranges, or all future ranges start after target
+        while self.index < self.cmap.destend.len() {
+            // translate our index to the correct revmap
+            let ci = &self.cmap.revmaps[ self.cmap.destend[self.index].1 ];
+            let nxtstart = self.cmap.destend[self.index].2;
+            self.index += 1;
+            if ci.dest_start <= self.num && ci.dest_start + ci.len > self.num {
+                let pi = self.num - ci.dest_start + ci.src_start;
+                let mut rlen = ci.dest_start + ci.len - self.num;
+                // find the first range after num
+                let nxtind = self.cmap.revmaps.binary_search_by_key(&(self.num+1), |ci| ci.dest_start)
+                    .unwrap_or_else(|e| e);
+                if nxtind < self.cmap.revmaps.len() {
+                    let nxtstart = self.cmap.revmaps[nxtind].dest_start;
+                    if nxtstart - self.num < rlen {
+                        rlen = nxtstart - self.num;
+                    }
+                }
+                return Some((pi, Some(rlen)));
+            }
+            if nxtstart.is_some() && nxtstart.unwrap() > self.num {
+                break;
+            }
+        }
+        // we reached the end of possible targets
+        None
     }
 }
 
@@ -119,35 +199,108 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
     }
     er.part1(min_loc.unwrap_or(0), Some("Minimum location based on individual seeds"));
 
-    // part 2, treat the seeds as a (start, len) pair
-    min_loc = None;
+    // part 2, treat the seeds as a (start, len) pair. Convert to list of seed ranges
+    let mut seedranges = Vec::new();
     let mut si = seeds.iter();
     while let Some(s) = si.next() {
         let lasts = *s + *si.next().expect("Expect even amount of numbers on seed line");
-        er.debugln(&format!("Starting with seed {}, upto = {}", *s, lasts));
-        let mut stseed = *s;
-        let mut minrange = None;
-        while stseed < lasts {
-            let mut pi = stseed;
-            // er.debugln(&format!("  trying seed {:?}", stseed));
-            for &cmap in &maporder {
-                let rsize;
-                (pi, rsize) = cmap.map(pi);
-                if minrange.is_none() {
-                    minrange = rsize;
-                } else if rsize.is_some() && minrange.unwrap() > rsize.unwrap() {
-                    minrange = rsize;
-                }
+        seedranges.push((*s, lasts));
+    }
+    seedranges.sort_by_key(|&(start, _)| start);
+
+    // Loop over the location rev map until we find a match
+    let mut minloc: PItem = 0;
+'location:
+    loop {
+        let mut min_range = None;
+        let piter = maporder.last().unwrap().revmap(minloc);
+        for (pi, rlen) in piter {
+            // er.debugln(&format!("  revmapped to {} range {pi} len {:?}", maporder.last().unwrap().fromwhat, rlen));
+            // keep track of minimum range len
+            if min_range.is_none() || (rlen.is_some() && min_range.unwrap() > rlen.unwrap()) {
+                min_range = rlen;
             }
-            if min_loc.is_none() || min_loc.unwrap() > pi {
-                min_loc = Some(pi);
-                er.debugln(&format!("Minimum location so far: {}", pi));
+            if let Some(offset) = find_map_match(pi, maporder.len() - 2, rlen, &maporder, &seedranges) {
+                // println!("  * Solution found for location {}", minloc + offset);
+                er.part2(minloc + offset, Some("Minimum location based on ranges of seeds"));
+                break 'location;
             }
-            assert!(minrange.unwrap_or(0) > 0, "minrange cannot be zero");
-            stseed += minrange.unwrap();
+        }
+        if let Some(mr) = min_range {
+            minloc += mr;
+        } else {
+            panic!("No solution found for part 2");
         }
     }
-    er.part2(min_loc.unwrap_or(0), Some("Minimum location based on seed ranges"));
+}
+
+fn find_map_match(pi: PItem, mapidx: usize, rlen: Option<PItem>, maporder: &Vec<&ConvMap>, seedranges: &Vec<(PItem, PItem)>) -> Option<PItem> {
+    let cmap = maporder[mapidx];
+    // loop over entries in this map until we run out of rlen
+    let mut offset = 0;
+    while rlen.is_none() || offset < rlen.unwrap() {
+        let mut min_range = None;
+        let piter = cmap.revmap(pi + offset);
+        for (pi2, mut rlen2) in piter {
+            // this range should not exceed the given range
+            if rlen.is_some() && (rlen2.is_none() || rlen2.unwrap() + offset > rlen.unwrap()) {
+                rlen2 = Some(rlen.unwrap() - offset);
+            }
+            // keep track of minimum range of current map
+            if min_range.is_none() || (rlen2.is_some() && min_range.unwrap() > rlen2.unwrap()) {
+                min_range = rlen2;
+            }
+            if mapidx > 0 {
+                // recurse
+                if let Some(offset2) = find_map_match(pi2, mapidx - 1, rlen2, maporder, seedranges) {
+                    // println!("    * Solution found for {} {}, offset is {}", cmap.fromwhat, pi + offset + offset2, offset + offset2);
+                    return Some(offset + offset2);
+                }
+            } else if let Some(offset2) = find_seed_match(pi2, rlen2, seedranges) {
+                return Some(offset + offset2);
+            }
+        }
+        if let Some(mr) = min_range {
+            offset += mr;
+        } else {
+            // infinte range returned no usable matches, or no mappings possible at all
+            return None;
+        }
+    }
+    None
+}
+
+fn find_seed_match(pi: PItem, rlen: Option<PItem>, seedranges: &Vec<(PItem, PItem)>) -> Option<PItem> {
+    let inseed = seedranges.binary_search_by(|&(start, end)| {
+        if start > pi {
+            Ordering::Greater
+        } else if end <= pi {
+            Ordering::Less
+        } else { // start <= pi && pi < end
+            Ordering::Equal
+        }
+    });
+
+    if let Err(seedpos) = inseed {
+        // no direct match in seeds for start of range
+        if seedpos >= seedranges.len() {
+            // match after last seed range
+            return None;
+        }
+        // see if [pi, pi+rlen> overlaps with a seed range
+        if pi <= seedranges[seedpos].0 && (
+            rlen.is_none() || // range is infinte so seedrange is included as it starts after pi
+            pi + rlen.unwrap() - 1 >= seedranges[seedpos].0 // start of seedrange is in pi - pi+rlen-1
+        ) {
+            // return offset to start of the seed range
+            return Some(seedranges[seedpos].0 - pi);
+        } else {
+            return None;
+        }
+    } else {
+        // pi is in a seed range
+        return Some(0);
+    }
 }
 
 #[cfg(test)]
