@@ -34,7 +34,7 @@ fn wins(r: RaceCond) -> Option<i64> {
         let s2 = ((r.time as f64) + sqr) / 2.0;
         let w1 = s1.ceil() as i64;
         let w2 = s2.floor() as i64;
-        println!("Race {:?} win from {s1} == {w1} to {s2} == {w2}", r);
+        // println!("Race {:?} win from {s1} == {w1} to {s2} == {w2}", r);
         if (sqr as i64).pow(2) == sq {
             // Square matches exactly. That means we do not win at the zero points,
             // but break even. So we need to exclude the endpoints, instead of include them.
