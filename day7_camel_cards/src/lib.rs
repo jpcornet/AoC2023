@@ -139,7 +139,7 @@ QQQJA 483
 
     #[test]
     fn test_part12() {
-        let er = ExRunner::run("day 6".to_string(), solve, test_input());
+        let er = ExRunner::run("day 7".to_string(), solve, test_input());
         er.print_raw();
         assert_eq!(er.answ()[0], Some("6440".to_string()));
         assert_eq!(er.answ()[1], Some("5905".to_string()));
