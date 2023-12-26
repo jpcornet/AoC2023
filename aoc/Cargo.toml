@@ -18,3 +18,4 @@ day3_gear_ratios = { path = "../day3_gear_ratios" }
 day4_scratchcards = { path = "../day4_scratchcards" }
 day5_seed_fertilizer = { path = "../day5_seed_fertilizer" }
 day6_wait_for_it = { path = "../day6_wait_for_it" }
+day7_camel_cards = { path = "../day7_camel_cards" }
