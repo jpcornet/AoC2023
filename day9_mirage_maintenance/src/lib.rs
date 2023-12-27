@@ -4,7 +4,7 @@ use std::io::BufRead;
 pub fn solve(input: impl BufRead, er: &mut ExRunner) {
     let (predictprevsum, predictendsum) = input.lines().map(|l| {
         let line = l.expect("Error reading input");
-        let nums: Vec<i64> = line.split_whitespace().map(|n| n.parse().expect("Input should be numeric")).collect();
+        let nums: Vec<i32> = line.split_whitespace().map(|n| n.parse().expect("Input should be numeric")).collect();
         let mut derive = vec![nums];
         while !is_all_zeros(derive.last().unwrap()) {
             let mut prev = None;
@@ -21,8 +21,8 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
         if derive.last().unwrap().len() == 0 {
             panic!("Cannot derive to proper sequence, input = {}", line);
         }
-        let predictend: i64 = derive.iter().map(|v| v.last().unwrap()).sum();
-        let predictprev: i64 = derive.iter().rev().fold(0, |a, v| v[0] - a);
+        let predictend: i32 = derive.iter().map(|v| v.last().unwrap()).sum();
+        let predictprev: i32 = derive.iter().rev().fold(0, |a, v| v[0] - a);
         // er.debugln(&format!("Line = {}. Derive goes {} deep. Prediction is: {} .. {}", line, derive.len(), predictprev, predictend));
         ( predictprev, predictend )
     }).fold((0, 0), |a, e| (a.0 + e.0, a.1 + e.1));
@@ -30,8 +30,15 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
     er.part2(predictprevsum, Some("Sum of all backwards extrapolations"));
 }
 
-fn is_all_zeros<T: PartialEq<i64>>(nums: &Vec<T>) -> bool {
-    nums.iter().all(|x| *x == 0)
+trait Zero {
+    const ZERO: Self;
+}
+
+impl Zero for i32 { const ZERO: Self = 0; }
+impl Zero for i64 { const ZERO: Self = 0; }
+
+fn is_all_zeros<T: PartialEq + Zero>(nums: &Vec<T>) -> bool {
+    nums.iter().all(|x| *x == T::ZERO)
 }
 
 #[cfg(test)]
