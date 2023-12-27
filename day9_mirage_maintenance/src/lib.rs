@@ -2,7 +2,7 @@ use exrunner::ExRunner;
 use std::io::BufRead;
 
 pub fn solve(input: impl BufRead, er: &mut ExRunner) {
-    let predictsum: i64 = input.lines().map(|l| {
+    let (predictprevsum, predictendsum) = input.lines().map(|l| {
         let line = l.expect("Error reading input");
         let nums: Vec<i64> = line.split_whitespace().map(|n| n.parse().expect("Input should be numeric")).collect();
         let mut derive = vec![nums];
@@ -21,11 +21,13 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
         if derive.last().unwrap().len() == 0 {
             panic!("Cannot derive to proper sequence, input = {}", line);
         }
-        let predict: i64 = derive.iter().map(|v| v.last().unwrap()).sum();
-        er.debugln(&format!("Line = {}. Derive goes {} deep. Prediction is: {}", line, derive.len(), predict));
-        predict
-    }).sum();
-    er.part1(predictsum, Some("Sum of all predictions"));
+        let predictend: i64 = derive.iter().map(|v| v.last().unwrap()).sum();
+        let predictprev: i64 = derive.iter().rev().fold(0, |a, v| v[0] - a);
+        // er.debugln(&format!("Line = {}. Derive goes {} deep. Prediction is: {} .. {}", line, derive.len(), predictprev, predictend));
+        ( predictprev, predictend )
+    }).fold((0, 0), |a, e| (a.0 + e.0, a.1 + e.1));
+    er.part1(predictendsum, Some("Sum of all predictions"));
+    er.part2(predictprevsum, Some("Sum of all backwards extrapolations"));
 }
 
 fn is_all_zeros<T: PartialEq<i64>>(nums: &Vec<T>) -> bool {
@@ -51,5 +53,6 @@ mod tests {
         let er = ExRunner::run("day 9".to_string(), solve, test_input());
         er.print_raw();
         assert_eq!(er.answ()[0], Some("114".to_string()));
+        assert_eq!(er.answ()[1], Some("2".to_string()));
     }
 }
