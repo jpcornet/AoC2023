@@ -21,3 +21,4 @@ day6_wait_for_it = { path = "../day6_wait_for_it" }
 day7_camel_cards = { path = "../day7_camel_cards" }
 day8_haunted_wasteland = { path = "../day8_haunted_wasteland" }
 day9_mirage_maintenance = { path = "../day9_mirage_maintenance" }
+day10_pipe_maze = { path = "../day10_pipe_maze" }
