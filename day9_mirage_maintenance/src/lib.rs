@@ -8,7 +8,7 @@ pub fn solve(input: impl BufRead, er: &mut ExRunner) {
         let mut derive = vec![nums];
         while !is_all_zeros(derive.last().unwrap()) {
             let mut prev = None;
-            derive.push( derive.last().unwrap().iter().filter_map(move |x| {
+            derive.push( derive.last().unwrap().iter().filter_map(move |&x| {
                 if let Some(pr) = prev {
                     prev = Some(x);
                     Some(x - pr)
@@ -56,7 +56,7 @@ mod tests {
     }
 
     #[test]
-    fn test_part1() {
+    fn test_part12() {
         let er = ExRunner::run("day 9".to_string(), solve, test_input());
         er.print_raw();
         assert_eq!(er.answ()[0], Some("114".to_string()));
