@@ -14,7 +14,7 @@ fn parse(input: impl BufRead) -> Pipemaze {
     }).collect();
     let mut findstart = field.iter().enumerate().filter_map(|(y, l)| {
         l.iter().enumerate().filter_map(|(x, c)| {
-            if *c == 'S' as u8 {
+            if *c == b'S' {
                 Some((x, y))
             } else {
                 None
@@ -109,7 +109,7 @@ fn walk_around(pm: &Pipemaze, startdir: DIR) -> (Option<usize>, Vec<Vec<u8>>) {
     let mut pathonly: Vec<Vec<u8>> = Vec::new();
     // fill the pathonly with dots, same size as input pipemaze
     for l in &pm.field {
-        pathonly.push( std::iter::repeat('.' as u8).take(l.len()).collect() );
+        pathonly.push( std::iter::repeat(b'.').take(l.len()).collect() );
     }
     while let Some((newpos, newdir)) = walk_pipe(pm, pos, dir) {
         pathlen += 1;
@@ -118,7 +118,7 @@ fn walk_around(pm: &Pipemaze, startdir: DIR) -> (Option<usize>, Vec<Vec<u8>>) {
             // determine the starting point shape size. We started with startdir, and we end with dir into the startpos
             let startdirs = startdir | mirror_dir(dir);
             let startshape = PIPES.entries().filter_map(|(&shape, &dirs)| if dirs == startdirs { Some(shape) } else { None }).next().expect("Unknown start directions");
-            pathonly[pos.1][pos.0] = startshape as u8;
+            pathonly[pos.1][pos.0] = startshape;
             return (Some(pathlen), pathonly);
         } else {
             // copy this element of the path
@@ -132,7 +132,7 @@ fn walk_around(pm: &Pipemaze, startdir: DIR) -> (Option<usize>, Vec<Vec<u8>>) {
 fn count_enclosed(field: &Vec<Vec<u8>>) -> usize {
     let mut in_path = false;
     field.iter().map(move |l| {
-        l.iter().filter(move |&&c| {
+        let enclosed = l.iter().filter(move |&&c| {
             // pretend to scan just south of the "-" marker. Anytime we cross the path, flip the "in-path" indicator.
             // This means it flips not only on | but also on F and 7. It does not flip on L and J.
             if c == b'|' || c == b'7' || c == b'F' {
@@ -141,7 +141,11 @@ fn count_enclosed(field: &Vec<Vec<u8>>) -> usize {
             } else {
                 c == b'.' && in_path
             }
-        }).count()
+        }).count();
+        if in_path {
+            panic!("Still in path at end of field");
+        }
+        enclosed
     }).sum()
 }
 
