@@ -12,14 +12,14 @@ fn parse(input: impl BufRead) -> Pipemaze {
         let line = l.expect("Error reading input");
         line.as_bytes().to_vec()
     }).collect();
-    let mut findstart = field.iter().enumerate().filter_map(|(y, l)| {
-        l.iter().enumerate().filter_map(|(x, c)| {
+    let mut findstart = field.iter().enumerate().flat_map(|(y, l)| {
+        l.iter().enumerate().filter_map(move |(x, c)| {
             if *c == b'S' {
                 Some((x, y))
             } else {
                 None
             }
-        }).next()
+        })
     });
     let startpos = findstart.next().expect("No S startpos in input");
     if findstart.next().is_some() {
@@ -117,7 +117,7 @@ fn walk_around(pm: &Pipemaze, startdir: DIR) -> (Option<usize>, Vec<Vec<u8>>) {
         if pos == pm.startpos {
             // determine the starting point shape size. We started with startdir, and we end with dir into the startpos
             let startdirs = startdir | mirror_dir(dir);
-            let startshape = PIPES.entries().filter_map(|(&shape, &dirs)| if dirs == startdirs { Some(shape) } else { None }).next().expect("Unknown start directions");
+            let startshape = PIPES.entries().find_map(|(&shape, &dirs)| if dirs == startdirs { Some(shape) } else { None }).expect("Unknown start directions");
             pathonly[pos.1][pos.0] = startshape;
             return (Some(pathlen), pathonly);
         } else {
