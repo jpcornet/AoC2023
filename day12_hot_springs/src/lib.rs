@@ -1,21 +1,40 @@
 use exrunner::ExRunner;
-use std::{io::BufRead, ops::ControlFlow};
+use std::{io::BufRead, ops::ControlFlow, collections::HashMap};
+
+#[derive(Debug)]
+struct CacheStats {
+    cache_hit: i32,
+    cache_miss: i32,
+}
+
+#[derive(PartialEq, Eq, Hash)]
+struct SpringCacheEntry {
+    springs: Vec<u8>,
+    runs: Vec<i32>,
+}
 
 pub fn solve(input: impl BufRead, er: &mut ExRunner) {
     let mut total_pos = 0;
+    let mut cs = CacheStats{ cache_hit: 0, cache_miss: 0 };
+    // create a cache for spring positions & runs to possibilities.
+    let mut springruncache = HashMap::new();
     for l in input.lines() {
         let line = l.expect("Error reading input");
         let (springs, runstr) = line.split_once(' ').expect("Need space in input");
         let runs: Vec<i32> = runstr.split(',').map(|n| n.parse().expect("runs should be numeric")).collect();
-        let possibilities = count_solutions(springs, &runs);
-        er.debugln(&format!("Line: {}, possible solutions: {}", line, possibilities));
+        let possibilities = count_solutions(springs, &runs, &mut springruncache, &mut cs);
+        // er.debugln(&format!("Line: {}, possible solutions: {}", line, possibilities));
         total_pos += possibilities;
     }
     er.part1(total_pos, Some("Sum of all possible solutions"));
+    er.debugln(&format!("Cache stats: {:?}", cs));
 }
 
-fn count_solutions(springs: &str, runs: &Vec<i32>) -> i32 {
-    let springgroups: Vec<_> = springs.split('.').filter(|s| s.len() > 0).collect();
+fn count_solutions(springs: &str, runs: &Vec<i32>, cache: &mut HashMap<SpringCacheEntry, i32>, cachestat: &mut CacheStats) -> i32 {
+    // convert to springgroups. Also convert to [byte] as it's easier to address.
+    let springgroups: Vec<_> = springs.split('.').filter_map(|s| {
+        if s.len() > 0 { Some(s.as_bytes()) }  else { None }
+    }).collect();
     // corner case: no spring groups at all
     if springgroups.len() == 0 {
         return if runs.len() == 0 { 1 } else { 0 };
@@ -34,7 +53,7 @@ fn count_solutions(springs: &str, runs: &Vec<i32>) -> i32 {
         let mut sgindex: Vec<_> = (0..springgroups.len()).collect();
         sgindex.sort_by_key(|&i| springgroups[i].len());
         let solutions = sgindex.iter().map(|&i| {
-            spring_distributions(springgroups[i], &rundist[i])
+            spring_distributions(springgroups[i], &rundist[i], cache, cachestat)
         }).try_fold(1, |acc, e| {
             if e > 0 {
                 ControlFlow::Continue(acc * e)
@@ -64,80 +83,81 @@ fn count_solutions(springs: &str, runs: &Vec<i32>) -> i32 {
     }
 }
 
-fn spring_distributions(springs: &str, runs: &Vec<i32>) -> i32 {
+fn spring_distributions(springs: &[u8], runs: &Vec<i32>, cache: &mut HashMap<SpringCacheEntry, i32>, cachestat: &mut CacheStats) -> i32 {
     // easy ones first. No runs.
     if runs.len() == 0 {
         // if any springs are definately broken, there is no way to do it.
         // if there are only unknown springs, there is only 1 way to do it, which is all not broken.
-        return if springs.contains('#') { 0 } else { 1 };
+        let possible = if springs.contains(&b'#') { 0 } else { 1 };
+        return possible;
     }
-    // cramming too many runs on the springs
+    // sum of all runs
     let totalruns = runs.iter().fold(0, |acc, &e| acc + e);
-    if totalruns + runs.len() as i32 - 1 > springs.len() as i32 {
+    // minimum length of runs plus blanks in between
+    let minlength = totalruns + runs.len() as i32 - 1;
+    // cramming too many runs on the springs
+    if  minlength > springs.len() as i32 {
         return 0;
     }
     // not enough runs for the springs already set
-    let set_springs = springs.chars().filter(|&c| c == '#').count();
+    let set_springs = springs.iter().filter(|&&c| c == b'#').count();
     if  set_springs as i32 > totalruns {
         return 0;
     }
     // only set springs
-    if !springs.contains('?') {
-        return if runs.len() == 1 && runs[0] == springs.len() as i32 { 1 } else { 0 };
+    if !springs.contains(&b'?') {
+        let possible = if runs.len() == 1 && runs[0] == springs.len() as i32 { 1 } else { 0 };
+        return possible;
     }
-    // now just brute-force the number of springs and see if it matches.
-    let setunknown = totalruns as usize - set_springs;
-    let unknownsprings = springs.chars().filter(|&c| c == '?').count();
+
+    // only unknown springs. This can easily be calculated with the minimum length and the number of runs
+    if !springs.contains(&b'#') {
+        let wiggle = springs.len() as i32 - minlength;
+        let bindivs = runs.len() as i32;
+        // in how many ways can we distribute these "wiggle" blanks over the empty spaces, including the leading
+        // and trailing empty space, so over runs.len() + 1 spaces. Or divided by runs.len() divisions between
+        // the spaces. There are (bindivs + wiggle over bindivs) possibilities.
+        let possibilities = (0..bindivs).fold(1, |acc, e| {
+            acc * (wiggle + bindivs - e) / (e+1)
+        });
+        // println!("Only unknown springs {} runs {:?}, possibilities: {possibilities}", std::str::from_utf8(springs).unwrap(), runs);
+        return possibilities;
+    }
+
+    // try the cache
+    let key = SpringCacheEntry{ springs: springs.to_vec(), runs: runs.to_vec() };
+    if let Some(&possibilities) = cache.get(&key) {
+        cachestat.cache_hit += 1;
+        return possibilities;
+    }
+
+    // last resort. Try sticking run number 1 in, then recurse with the rest of the runs and the string
     let mut possible = 0;
-'springposition:
-    for mask in 0_i64..1_i64<<unknownsprings {
-        if mask.count_ones() == setunknown as u32 {
-            // determine run lengths of current layout.
-            let mut bit = 1;
-            let mut run_idx = 0;
-            let mut run_len = 0;
-            let mut trypos = String::new();
-            for c in springs.chars() {
-                let is_broken = if c == '#' {
-                    trypos.push(c);
-                    true
-                } else if c == '?' {
-                    let broken = mask & bit != 0;
-                    bit <<= 1;
-                    trypos.push(if broken { '#' } else { '.' });
-                    broken
-                } else {
-                    panic!("Bad character in springs");
-                };
-                if is_broken {
-                    run_len += 1;
-                } else if run_len > 0 && run_idx < runs.len() && runs[run_idx] == run_len {
-                    run_idx += 1;
-                    run_len = 0;
-                } else if run_len > 0 {
-                    // mismatch
-                    // println!("Mismatch! Input {springs} runs {:?}. Tried {trypos} mismatch at run index {run_idx}", runs);
-                    continue 'springposition;
-                }
-            }
-            // any runs at the end?
-            if run_len != 0 {
-                if run_idx < runs.len() && runs[run_idx] == run_len {
-                    run_idx += 1;
-                } else {
-                    // println!("Mismatch! Input {springs} runs {:?}. Tried {trypos} mismatch at run index {run_idx}", runs);
-                    continue 'springposition;
-                }
-            }
-            if run_idx == runs.len() {
-                // we found a match!
+    let firstrun = runs[0] as usize;
+    let restruns = runs[1..].to_vec();
+    for pos in 0..(springs.len() + 1 - firstrun as usize) {
+        // make sure that the spring before the run is ?, so can be good.
+        if pos > 0 && springs[pos-1] == b'#' {
+            // it's a broken spring, so previous pos started a run, so nothing after this is possible
+            break;
+        }
+        // make sure that the spring after the run is ? or end of run
+        if pos + firstrun == springs.len() || springs[pos + firstrun] == b'?' {
+            // calculate possibilities for the rest of the runs and the rest of the springs.
+            // if we reached the end of the springs, we have 1 possibility if restruns is empty
+            if pos + firstrun + 1 < springs.len() {
+                let recpossible = spring_distributions(&springs[pos+firstrun+1..], &restruns, cache, cachestat);
+                possible += recpossible;
+            } else if restruns.len() == 0 {
                 possible += 1;
-                // println!("Found a match! Input {springs} runs {:?} got: {trypos}", runs);
             }
         }
     }
-    // println!("Springs {springs} runs {:?} possibilities: {possible}", runs);
-    possible
+
+    // insert into cache
+    cache.insert(key, possible );
+    cachestat.cache_miss += 1;
+    return possible;
 }
 
 #[cfg(test)]
