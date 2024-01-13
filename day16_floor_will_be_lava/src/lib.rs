@@ -108,70 +108,56 @@ fn shine(floor: &Vec<Vec<u8>>, seen: &mut HashMap<(i32, i32), DIR>, output: &mut
     }
 }
 
-fn count_energized(floor: &Vec<Vec<u8>>, x: i32, y: i32, dir: DIR) -> (usize, Vec<(i32, DIR)>) {
+fn count_energized(floor: &Vec<Vec<u8>>, x: i32, y: i32, dir: DIR) -> (usize, HashSet<(i32, DIR)>) {
     let mut light_seen = HashMap::new();
     let mut output = HashSet::new();
     shine(&floor, &mut light_seen, &mut output, x, y, dir);
-    (light_seen.len(), output.into_iter().collect())
+    (light_seen.len(), output)
 }
 
 pub fn solve(input: impl BufRead, er: &mut ExRunner) {
     let floor = parse(input);
     er.parse_done();
-    // collect minimum energized level of outputs
-    let mut energy_output = HashMap::new();
+    // collect outputs already seen. We cannot improve stuff by shining light into it.
+    let mut output_seen = HashSet::new();
     // determine max energized level
     let mut max_energized = None;
     // first do all EAST and WEST light.
     for y in 0..floor.len() {
         for dir in [EAST, WEST] {
+            if output_seen.contains(&(y as i32, dir)) {
+                // already seen as output, makes no sense shining light in here, that can only get the same
+                // or less light in
+                continue;
+            }
             let x = if dir == EAST { 0 } else { floor[y].len() - 1 };
             let (energized, output) = count_energized(&floor, x as i32, y as i32, dir);
+            for o in output {
+                output_seen.insert(o);
+            }
             if y == 0 && dir == EAST {
-                // part 1
+                // we solved part 1
                 er.part1(energized, Some("Number of energized tiles"));
             }
             if max_energized.is_none() || energized > max_energized.unwrap() {
                 max_energized = Some(energized);
-                println!("New max energized level {energized} shining dir {dir} pos {y}");
-            }
-            for (outpos, outdir) in output {
-                energy_output.entry((outpos, outdir)).and_modify(|lvl: &mut (usize, usize, u8)| {
-                    if lvl.0 > energized {
-                        *lvl = (energized, y, dir);
-                    }
-                }).or_insert((energized, y, dir));
-            }
-            if let Some(outlevel) = energy_output.get(&(y as i32, dir)) {
-                // test the assertion that reversing light never improves energy
-                if energized > outlevel.0 {
-                    println!("FALSE! Shining dir {} at pos {} energizes {} and gives output at dir {} pos {}, but shining into there enegizes more: {}",
-                        outlevel.2, outlevel.1, outlevel.0, dir, y, energized);
-                }
+                // println!("New max energized level {energized} shining dir {dir} pos {y}");
             }
         }
     }
     for x in 0..floor[0].len() {
         for dir in [SOUTH, NORTH] {
+            if output_seen.contains(&(x as i32, dir)) {
+                continue;
+            }
             let y = if dir == SOUTH { 0 } else { floor.len() - 1};
             let (energized, output) = count_energized(&floor, x as i32, y as i32, dir);
+            for o in output {
+                output_seen.insert(o);
+            }
             if max_energized.is_none() || energized > max_energized.unwrap() {
                 max_energized = Some(energized);
-                println!("New max energized level {energized} shining dir {dir} pos {x}");
-            }
-            for (outpos, outdir) in output {
-                energy_output.entry((outpos, outdir)).and_modify(|lvl| {
-                    if lvl.0 > energized {
-                        *lvl = (energized, x, dir);
-                    }
-                }).or_insert((energized, x, dir));
-            }
-            if let Some(outlevel) = energy_output.get(&(x as i32, dir)) {
-                // test the assertion that reversing light never improves energy
-                if energized > outlevel.0 {
-                    println!("FALSE! Shining dir {} at pos {} energizes {} and gives output at dir {} pos {}, but shining into there enegizes more: {}",
-                        outlevel.2, outlevel.1, outlevel.0, dir, x, energized);
-                }
+                // println!("New max energized level {energized} shining dir {dir} pos {x}");
             }
         }
     }
